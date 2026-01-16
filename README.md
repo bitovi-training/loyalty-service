@@ -25,6 +25,34 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Loyalty Service
+
+This service manages customer loyalty points, including balance calculation, point redemption, and order service integration.
+
+### Features
+
+- **Loyalty Points Management**: Track earned and redeemed points
+- **Balance Calculation**: Real-time point balance calculation
+- **Point Redemption**: Secure point redemption with concurrency control
+- **Order Service Client**: Simple HTTP client to fetch order data from the Order Service
+
+### Order Service Integration
+
+The loyalty service includes a simple `OrderClient` class for fetching order data from the Order Service.
+
+**See [ORDER_CLIENT.md](./ORDER_CLIENT.md) for usage documentation.**
+
+### Environment Variables
+
+- `PORT` - Server port (default: 3000)
+- `ORDER_SERVICE_URL` - Order service URL (default: http://localhost:8100)
+
+### API Endpoints
+
+- `GET /loyalty/balance/:userId` - Get loyalty balance
+- `POST /loyalty/redeem` - Redeem loyalty points
+- `GET /loyalty/redemptions/:userId` - Get redemption history
+
 ## Project setup
 
 ```bash

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, HttpCode, Headers } from '@nestjs/common';
 import { LoyaltyService } from './loyalty.service';
 import { BalanceResponseDto } from './dto/balance-response.dto';
 import { RedeemRequestDto } from './dto/redeem-request.dto';
@@ -14,8 +14,12 @@ export class LoyaltyController {
    * Get loyalty points balance for a user
    */
   @Get('balance')
-  getBalance(@Param('userId') userId: string): BalanceResponseDto {
-    return this.loyaltyService.getBalance(userId);
+  async getBalance(
+    @Param('userId') userId: string,
+    @Headers('authorization') authorization?: string,
+  ): Promise<BalanceResponseDto> {
+    const authToken = this.extractToken(authorization);
+    return this.loyaltyService.getBalance(userId, authToken);
   }
 
   /**
@@ -27,8 +31,19 @@ export class LoyaltyController {
   async redeemPoints(
     @Param('userId') userId: string,
     @Body() redeemRequest: RedeemRequestDto,
+    @Headers('authorization') authorization?: string,
   ): Promise<RedemptionResponseDto> {
-    return this.loyaltyService.redeemPoints(userId, redeemRequest.points);
+    const authToken = this.extractToken(authorization);
+    return this.loyaltyService.redeemPoints(userId, redeemRequest.points, authToken);
+  }
+
+  /**
+   * Extract token from Authorization header
+   */
+  private extractToken(authorization?: string): string | undefined {
+    if (!authorization) return undefined;
+    const parts = authorization.split(' ');
+    return parts.length === 2 && parts[0] === 'Bearer' ? parts[1] : undefined;
   }
 
   /**
@@ -36,9 +51,9 @@ export class LoyaltyController {
    * Get redemption history for a user
    */
   @Get('redemptions')
-  getRedemptionHistory(
+  async getRedemptionHistory(
     @Param('userId') userId: string,
-  ): RedemptionHistoryResponseDto {
+  ): Promise<RedemptionHistoryResponseDto> {
     return this.loyaltyService.getRedemptionHistory(userId);
   }
 }

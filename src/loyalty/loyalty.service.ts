@@ -5,7 +5,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import { OrderRepository } from './repositories/order.repository';
+import { OrderClient } from '../clients/order-client';
+import { UserClient } from '../clients/user-client';
 import { RedemptionRepository } from './repositories/redemption.repository';
 import { BalanceResponseDto } from './dto/balance-response.dto';
 import { RedemptionResponseDto } from './dto/redemption-response.dto';
@@ -16,7 +17,8 @@ export class LoyaltyService {
   private activeLocks: Map<string, Promise<void>> = new Map();
 
   constructor(
-    private readonly orderRepository: OrderRepository,
+    private readonly orderClient: OrderClient,
+    private readonly userClient: UserClient,
     private readonly redemptionRepository: RedemptionRepository,
   ) {}
 
@@ -24,18 +26,19 @@ export class LoyaltyService {
    * Calculate available balance for a user
    * Balance = SUM(active orders.points) - SUM(redemptions.points)
    */
-  calculateBalance(userId: string): {
+  async calculateBalance(userId: string, authToken?: string): Promise<{
     earnedPoints: number;
     redeemedPoints: number;
     balance: number;
-  } {
-    const orders = this.orderRepository.findByUserId(userId);
+  }> {
+    // Fetch orders from Order Service
+    const ordersResponse = await this.orderClient.getOrdersByUserId(userId, authToken);
     const redemptions = this.redemptionRepository.findByUserId(userId);
 
-    // Only count ACTIVE orders per data-model.md
-    const earnedPoints = orders
-      .filter((order) => order.status === 'active')
-      .reduce((sum, order) => sum + order.points, 0);
+    // Calculate earned points from completed/delivered orders
+    const earnedPoints = ordersResponse
+      .filter((order) => order.status === 'DELIVERED' || order.status === 'SHIPPED')
+      .reduce((sum, order) => sum + (order.accruedLoyaltyPoints || 0), 0);
 
     const redeemedPoints = redemptions.reduce(
       (sum, redemption) => sum + redemption.points,
@@ -50,14 +53,15 @@ export class LoyaltyService {
   /**
    * Get loyalty balance for a user
    */
-  getBalance(userId: string): BalanceResponseDto {
+  async getBalance(userId: string, authToken?: string): Promise<BalanceResponseDto> {
     // Validate user exists per research.md Decision 7
-    if (!this.orderRepository.userExists(userId)) {
+    const userExists = await this.userClient.validateUser(userId);
+    if (!userExists) {
       throw new NotFoundException(`User ${userId} not found`);
     }
 
     const { earnedPoints, redeemedPoints, balance } =
-      this.calculateBalance(userId);
+      await this.calculateBalance(userId, authToken);
 
     return {
       userId,
@@ -74,6 +78,7 @@ export class LoyaltyService {
   async redeemPoints(
     userId: string,
     points: number,
+    authToken?: string,
   ): Promise<RedemptionResponseDto> {
     // Wait for any pending operation on this user (per-user mutex)
     const existingLock = this.activeLocks.get(userId);
@@ -89,7 +94,7 @@ export class LoyaltyService {
     this.activeLocks.set(userId, lockPromise);
 
     try {
-      const result = this.executeRedemption(userId, points);
+      const result = await this.executeRedemption(userId, points, authToken);
       return result;
     } finally {
       lockResolve(); // Always release lock
@@ -100,22 +105,24 @@ export class LoyaltyService {
   /**
    * Execute the actual redemption (internal method)
    */
-  private executeRedemption(
+  private async executeRedemption(
     userId: string,
     points: number,
-  ): RedemptionResponseDto {
+    authToken?: string,
+  ): Promise<RedemptionResponseDto> {
     // Validate positive points per research.md Decision 7
     if (points <= 0) {
       throw new BadRequestException('Redemption amount must be positive');
     }
 
     // Validate user exists
-    if (!this.orderRepository.userExists(userId)) {
+    const userExists = await this.userClient.validateUser(userId);
+    if (!userExists) {
       throw new NotFoundException(`User ${userId} not found`);
     }
 
     // Calculate current balance
-    const { balance } = this.calculateBalance(userId);
+    const { balance } = await this.calculateBalance(userId, authToken);
 
     // Validate sufficient points
     if (balance < points) {
@@ -152,9 +159,10 @@ export class LoyaltyService {
    * Get redemption history for a user
    * Returns redemptions sorted by timestamp (newest first)
    */
-  getRedemptionHistory(userId: string) {
+  async getRedemptionHistory(userId: string) {
     // Validate user exists
-    if (!this.orderRepository.userExists(userId)) {
+    const userExists = await this.userClient.validateUser(userId);
+    if (!userExists) {
       throw new NotFoundException(`User ${userId} not found`);
     }
 
