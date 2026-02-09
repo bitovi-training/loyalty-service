@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { OrderClient } from '../clients/order-client';
 import { UserClient } from '../clients/user-client';
 import { RedemptionRepository } from './repositories/redemption.repository';
+import { OrderRepository } from './repositories/order.repository';
 import { BalanceResponseDto } from './dto/balance-response.dto';
 import { RedemptionResponseDto } from './dto/redemption-response.dto';
 
@@ -19,6 +20,7 @@ export class LoyaltyService {
   constructor(
     private readonly orderClient: OrderClient,
     private readonly userClient: UserClient,
+    private readonly orderRepository: OrderRepository,
     private readonly redemptionRepository: RedemptionRepository,
   ) {}
 
@@ -31,8 +33,19 @@ export class LoyaltyService {
     redeemedPoints: number;
     balance: number;
   }> {
-    // Fetch orders from Order Service
-    const ordersResponse = await this.orderClient.getOrdersByUserId(userId, authToken);
+    // Fetch orders from Order Service (fallback to local accruals if empty)
+    let ordersResponse = await this.orderClient.getOrdersByUserId(userId, authToken);
+    if (!ordersResponse || ordersResponse.length === 0) {
+      const localOrders = this.orderRepository.findByUserId(userId);
+      ordersResponse = localOrders.map((order) => ({
+        id: order.orderId,
+        products: [],
+        totalPrice: 0,
+        accruedLoyaltyPoints: order.points,
+        orderDate: new Date().toISOString(),
+        status: order.status === 'active' ? 'DELIVERED' : 'CANCELED',
+      }));
+    }
     const redemptions = this.redemptionRepository.findByUserId(userId);
 
     // Calculate earned points from completed/delivered orders
@@ -183,5 +196,35 @@ export class LoyaltyService {
       userId,
       redemptions: sortedRedemptions,
     };
+  }
+
+  /**
+   * Record loyalty points earned for an order
+   */
+  async accruePoints(
+    orderId: string,
+    userId: string,
+    totalPrice: number,
+    authToken?: string,
+  ): Promise<{ orderId: string; userId: string; points: number }> {
+    const userExists = await this.userClient.validateUser(userId);
+    if (!userExists) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    if (totalPrice < 0) {
+      throw new BadRequestException('Total price must be non-negative');
+    }
+
+    const points = Math.floor(totalPrice / 10);
+
+    this.orderRepository.save({
+      orderId,
+      userId,
+      points,
+      status: 'active',
+    });
+
+    return { orderId, userId, points };
   }
 }

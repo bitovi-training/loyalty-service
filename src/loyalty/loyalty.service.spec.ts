@@ -8,6 +8,7 @@ import { LoyaltyService } from './loyalty.service';
 import { OrderClient } from '../clients/order-client';
 import { UserClient } from '../clients/user-client';
 import { RedemptionRepository } from './repositories/redemption.repository';
+import { OrderRepository } from './repositories/order.repository';
 
 describe('LoyaltyService - User Story 1: Balance Calculation', () => {
   let service: LoyaltyService;
@@ -29,6 +30,7 @@ describe('LoyaltyService - User Story 1: Balance Calculation', () => {
         LoyaltyService,
         { provide: OrderClient, useValue: mockOrderClient },
         { provide: UserClient, useValue: mockUserClient },
+        OrderRepository,
         RedemptionRepository,
       ],
     }).compile();
@@ -152,6 +154,7 @@ describe('LoyaltyService - User Story 2: Redemption', () => {
         LoyaltyService,
         { provide: OrderClient, useValue: mockOrderClient },
         { provide: UserClient, useValue: mockUserClient },
+        OrderRepository,
         RedemptionRepository,
       ],
     }).compile();
@@ -285,6 +288,7 @@ describe('LoyaltyService - User Story 3: Redemption History', () => {
         LoyaltyService,
         { provide: OrderClient, useValue: mockOrderClient },
         { provide: UserClient, useValue: mockUserClient },
+        OrderRepository,
         RedemptionRepository,
       ],
     }).compile();

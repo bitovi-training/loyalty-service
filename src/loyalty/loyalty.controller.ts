@@ -5,7 +5,7 @@ import { RedeemRequestDto } from './dto/redeem-request.dto';
 import { RedemptionResponseDto } from './dto/redemption-response.dto';
 import { RedemptionHistoryResponseDto } from './dto/redemption-history.dto';
 
-@Controller('loyalty/:userId')
+@Controller('loyalty')
 export class LoyaltyController {
   constructor(private readonly loyaltyService: LoyaltyService) {}
 
@@ -13,7 +13,7 @@ export class LoyaltyController {
    * GET /loyalty/:userId/balance
    * Get loyalty points balance for a user
    */
-  @Get('balance')
+  @Get(':userId/balance')
   async getBalance(
     @Param('userId') userId: string,
     @Headers('authorization') authorization?: string,
@@ -26,7 +26,7 @@ export class LoyaltyController {
    * POST /loyalty/:userId/redeem
    * Redeem loyalty points for a user
    */
-  @Post('redeem')
+  @Post(':userId/redeem')
   @HttpCode(201)
   async redeemPoints(
     @Param('userId') userId: string,
@@ -50,10 +50,30 @@ export class LoyaltyController {
    * GET /loyalty/:userId/redemptions
    * Get redemption history for a user
    */
-  @Get('redemptions')
+  @Get(':userId/redemptions')
   async getRedemptionHistory(
     @Param('userId') userId: string,
   ): Promise<RedemptionHistoryResponseDto> {
     return this.loyaltyService.getRedemptionHistory(userId);
+  }
+
+  /**
+   * POST /loyalty/orders
+   * Record loyalty points for an order submission
+   */
+  @Post('/orders')
+  @HttpCode(201)
+  async accrueOrderPoints(
+    @Body()
+    body: { orderId: string; userId: string; totalPrice: number },
+    @Headers('authorization') authorization?: string,
+  ): Promise<{ orderId: string; userId: string; points: number }> {
+    const authToken = this.extractToken(authorization);
+    return this.loyaltyService.accruePoints(
+      body.orderId,
+      body.userId,
+      body.totalPrice,
+      authToken,
+    );
   }
 }

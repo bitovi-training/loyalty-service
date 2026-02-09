@@ -35,6 +35,7 @@ This service manages customer loyalty points, including balance calculation, poi
 - **Balance Calculation**: Real-time point balance calculation
 - **Point Redemption**: Secure point redemption with concurrency control
 - **Order Service Client**: Simple HTTP client to fetch order data from the Order Service
+- **Order Accrual Endpoint**: Record points earned on order submission
 
 ### Order Service Integration
 
@@ -49,9 +50,10 @@ The loyalty service includes a simple `OrderClient` class for fetching order dat
 
 ### API Endpoints
 
-- `GET /loyalty/balance/:userId` - Get loyalty balance
-- `POST /loyalty/redeem` - Redeem loyalty points
-- `GET /loyalty/redemptions/:userId` - Get redemption history
+- `GET /loyalty/:userId/balance` - Get loyalty balance
+- `POST /loyalty/:userId/redeem` - Redeem loyalty points
+- `GET /loyalty/:userId/redemptions` - Get redemption history
+- `POST /loyalty/orders` - Record loyalty points for an order
 
 ## Project setup
 
