@@ -1,5 +1,5 @@
-import { IsString, IsArray, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsArray, IsNumber, IsString, ValidateNested } from "class-validator";
+import { Type } from "class-transformer";
 
 export class RedemptionRecordDto {
   @IsString()
@@ -8,7 +8,7 @@ export class RedemptionRecordDto {
   @IsString()
   userId!: string;
 
-  @IsString()
+  @IsNumber()
   points!: number;
 
   @IsString()

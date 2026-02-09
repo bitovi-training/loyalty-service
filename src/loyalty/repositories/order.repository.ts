@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { Order } from '../entities/order.entity';
+import { Injectable } from "@nestjs/common";
+import { Order } from "../entities/order.entity";
 
 @Injectable()
 export class OrderRepository {
@@ -18,9 +18,5 @@ export class OrderRepository {
       orders.push(order);
     }
     this.ordersByUser.set(order.userId, orders);
-  }
-
-  hasUser(userId: string): boolean {
-    return this.ordersByUser.has(userId);
   }
 }

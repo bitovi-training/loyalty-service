@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from "@nestjs/common";
 
 export interface OrderProduct {
   productId: string;
@@ -7,6 +7,7 @@ export interface OrderProduct {
 
 export interface OrderFromService {
   id: string;
+  userId: string;
   products: OrderProduct[];
   totalPrice: number;
   accruedLoyaltyPoints?: number;
@@ -29,8 +30,10 @@ export class OrderClient {
 
   constructor() {
     this.orderServiceUrl =
-      process.env.ORDER_SERVICE_URL || 'http://localhost:8100';
-    this.logger.log(`OrderClient initialized with URL: ${this.orderServiceUrl}`);
+      process.env.ORDER_SERVICE_URL || "http://localhost:8100";
+    this.logger.log(
+      `OrderClient initialized with URL: ${this.orderServiceUrl}`,
+    );
   }
 
   /**
@@ -39,15 +42,15 @@ export class OrderClient {
   async getOrders(authToken?: string): Promise<OrderListResponse> {
     try {
       const headers: HeadersInit = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       };
 
       if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
+        headers["Authorization"] = `Bearer ${authToken}`;
       }
 
       const response = await fetch(`${this.orderServiceUrl}/orders`, {
-        method: 'GET',
+        method: "GET",
         headers,
       });
 
@@ -55,9 +58,9 @@ export class OrderClient {
         throw new Error(`Failed to fetch orders: ${response.statusText}`);
       }
 
-      return await response.json();
+      return (await response.json()) as OrderListResponse;
     } catch (error) {
-      this.logger.error('Error fetching orders from order service:', error);
+      this.logger.error("Error fetching orders from order service:", error);
       throw error;
     }
   }
@@ -71,17 +74,17 @@ export class OrderClient {
   ): Promise<OrderFromService> {
     try {
       const headers: HeadersInit = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       };
 
       if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
+        headers["Authorization"] = `Bearer ${authToken}`;
       }
 
       const response = await fetch(
         `${this.orderServiceUrl}/orders/${orderId}`,
         {
-          method: 'GET',
+          method: "GET",
           headers,
         },
       );
@@ -90,7 +93,7 @@ export class OrderClient {
         throw new Error(`Failed to fetch order: ${response.statusText}`);
       }
 
-      return await response.json();
+      return (await response.json()) as OrderFromService;
     } catch (error) {
       this.logger.error(`Error fetching order ${orderId}:`, error);
       throw error;
@@ -108,7 +111,7 @@ export class OrderClient {
       const response = await this.getOrders(authToken);
       // Note: This assumes all orders are returned. In production,
       // you might want to add a query parameter to filter by userId on the server
-      return response.orders;
+      return response.orders.filter((order) => order.userId === userId);
     } catch (error) {
       this.logger.error(`Error fetching orders for user ${userId}:`, error);
       throw error;

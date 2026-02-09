@@ -1,16 +1,16 @@
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
-  ConflictException,
-  BadRequestException,
-} from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
-import { OrderClient } from '../clients/order-client';
-import { UserClient } from '../clients/user-client';
-import { RedemptionRepository } from './repositories/redemption.repository';
-import { OrderRepository } from './repositories/order.repository';
-import { BalanceResponseDto } from './dto/balance-response.dto';
-import { RedemptionResponseDto } from './dto/redemption-response.dto';
+} from "@nestjs/common";
+import { v4 as uuidv4 } from "uuid";
+import { OrderClient } from "../clients/order-client";
+import { UserClient } from "../clients/user-client";
+import { BalanceResponseDto } from "./dto/balance-response.dto";
+import { RedemptionResponseDto } from "./dto/redemption-response.dto";
+import { OrderRepository } from "./repositories/order.repository";
+import { RedemptionRepository } from "./repositories/redemption.repository";
 
 @Injectable()
 export class LoyaltyService {
@@ -28,29 +28,25 @@ export class LoyaltyService {
    * Calculate available balance for a user
    * Balance = SUM(active orders.points) - SUM(redemptions.points)
    */
-  async calculateBalance(userId: string, authToken?: string): Promise<{
+  async calculateBalance(
+    userId: string,
+    authToken?: string,
+  ): Promise<{
     earnedPoints: number;
     redeemedPoints: number;
     balance: number;
   }> {
-    // Fetch orders from Order Service (fallback to local accruals if empty)
-    let ordersResponse = await this.orderClient.getOrdersByUserId(userId, authToken);
-    if (!ordersResponse || ordersResponse.length === 0) {
-      const localOrders = this.orderRepository.findByUserId(userId);
-      ordersResponse = localOrders.map((order) => ({
-        id: order.orderId,
-        products: [],
-        totalPrice: 0,
-        accruedLoyaltyPoints: order.points,
-        orderDate: new Date().toISOString(),
-        status: order.status === 'active' ? 'DELIVERED' : 'CANCELED',
-      }));
-    }
+    const ordersResponse = await this.orderClient.getOrdersByUserId(
+      userId,
+      authToken,
+    );
     const redemptions = this.redemptionRepository.findByUserId(userId);
 
     // Calculate earned points from completed/delivered orders
     const earnedPoints = ordersResponse
-      .filter((order) => order.status === 'DELIVERED' || order.status === 'SHIPPED')
+      .filter(
+        (order) => order.status === "DELIVERED" || order.status === "SHIPPED",
+      )
       .reduce((sum, order) => sum + (order.accruedLoyaltyPoints || 0), 0);
 
     const redeemedPoints = redemptions.reduce(
@@ -66,7 +62,10 @@ export class LoyaltyService {
   /**
    * Get loyalty balance for a user
    */
-  async getBalance(userId: string, authToken?: string): Promise<BalanceResponseDto> {
+  async getBalance(
+    userId: string,
+    authToken?: string,
+  ): Promise<BalanceResponseDto> {
     // Validate user exists per research.md Decision 7
     const userExists = await this.userClient.validateUser(userId);
     if (!userExists) {
@@ -125,7 +124,7 @@ export class LoyaltyService {
   ): Promise<RedemptionResponseDto> {
     // Validate positive points per research.md Decision 7
     if (points <= 0) {
-      throw new BadRequestException('Redemption amount must be positive');
+      throw new BadRequestException("Redemption amount must be positive");
     }
 
     // Validate user exists
@@ -205,7 +204,6 @@ export class LoyaltyService {
     orderId: string,
     userId: string,
     totalPrice: number,
-    authToken?: string,
   ): Promise<{ orderId: string; userId: string; points: number }> {
     const userExists = await this.userClient.validateUser(userId);
     if (!userExists) {
@@ -213,7 +211,7 @@ export class LoyaltyService {
     }
 
     if (totalPrice < 0) {
-      throw new BadRequestException('Total price must be non-negative');
+      throw new BadRequestException("Total price must be non-negative");
     }
 
     const points = Math.floor(totalPrice / 10);
@@ -222,7 +220,7 @@ export class LoyaltyService {
       orderId,
       userId,
       points,
-      status: 'active',
+      status: "active",
     });
 
     return { orderId, userId, points };

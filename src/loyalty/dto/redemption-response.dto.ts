@@ -1,4 +1,4 @@
-import { IsString, IsNumber, Min, IsDateString } from 'class-validator';
+import { IsString, IsNumber, Min, IsDateString } from "class-validator";
 
 export class RedemptionResponseDto {
   @IsString()
