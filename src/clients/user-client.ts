@@ -37,8 +37,9 @@ export class UserClient {
       }
 
       const data = (await response.json()) as { exists?: boolean };
-      this.logger.log(`User ${userId} validation: ${data.exists}`);
-      return data.exists;
+      const exists = data.exists ?? false;
+      this.logger.log(`User ${userId} validation: ${exists}`);
+      return exists;
     } catch (error) {
       this.logger.error(`Error validating user ${userId}:`, error);
       return false;
