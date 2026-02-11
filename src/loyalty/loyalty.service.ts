@@ -3,6 +3,8 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { v4 as uuidv4 } from "uuid";
 import { OrderClient } from "../clients/order-client";
@@ -204,10 +206,41 @@ export class LoyaltyService {
     orderId: string,
     userId: string,
     totalPrice: number,
+    authToken?: string,
   ): Promise<{ orderId: string; userId: string; points: number }> {
+    if (!orderId) {
+      throw new BadRequestException("Order ID is required");
+    }
+
+    if (!userId) {
+      throw new BadRequestException("User ID is required");
+    }
+
     const userExists = await this.userClient.validateUser(userId);
     if (!userExists) {
       throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    try {
+      await this.orderClient.getOrderById(orderId, authToken);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      if (error instanceof NotFoundException) {
+        throw new NotFoundException(`Order ${orderId} not found`);
+      }
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException("Invalid order ID");
     }
 
     if (totalPrice < 0) {

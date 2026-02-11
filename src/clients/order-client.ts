@@ -1,4 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from "@nestjs/common";
 
 export interface OrderProduct {
   productId: string;
@@ -55,6 +60,14 @@ export class OrderClient {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new UnauthorizedException("Unauthorized to access orders");
+        }
+
+        if (response.status === 403) {
+          throw new ForbiddenException("Forbidden from accessing orders");
+        }
+
         throw new Error(`Failed to fetch orders: ${response.statusText}`);
       }
 
@@ -90,6 +103,14 @@ export class OrderClient {
       );
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new UnauthorizedException("Unauthorized to access order");
+        }
+
+        if (response.status === 403) {
+          throw new ForbiddenException("Forbidden from accessing order");
+        }
+
         throw new Error(`Failed to fetch order: ${response.statusText}`);
       }
 

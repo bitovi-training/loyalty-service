@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AuthModule } from "@bitovi-corp/auth-middleware";
 import { RedemptionRepository } from "./repositories/redemption.repository";
 import { OrderRepository } from "./repositories/order.repository";
 import { LoyaltyService } from "./loyalty.service";
@@ -7,6 +8,7 @@ import { OrderClient } from "../clients/order-client";
 import { UserClient } from "../clients/user-client";
 
 @Module({
+  imports: [AuthModule],
   providers: [
     OrderRepository,
     RedemptionRepository,

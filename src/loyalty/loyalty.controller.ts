@@ -6,12 +6,15 @@ import {
   HttpCode,
   Param,
   Post,
+  UseGuards,
 } from "@nestjs/common";
+import { AuthGuard } from "@bitovi-corp/auth-middleware";
 import { LoyaltyService } from "./loyalty.service";
 import { BalanceResponseDto } from "./dto/balance-response.dto";
 import { RedeemRequestDto } from "./dto/redeem-request.dto";
 import { RedemptionResponseDto } from "./dto/redemption-response.dto";
 import { RedemptionHistoryResponseDto } from "./dto/redemption-history.dto";
+import { AccruePointsRequestDto } from "./dto/accrue-points-request.dto";
 
 @Controller("loyalty")
 export class LoyaltyController {
@@ -22,6 +25,7 @@ export class LoyaltyController {
    * Get loyalty points balance for a user
    */
   @Get(":userId/balance")
+  @UseGuards(AuthGuard)
   async getBalance(
     @Param("userId") userId: string,
     @Headers("authorization") authorization?: string,
@@ -36,6 +40,7 @@ export class LoyaltyController {
    */
   @Post(":userId/redeem")
   @HttpCode(201)
+  @UseGuards(AuthGuard)
   async redeemPoints(
     @Param("userId") userId: string,
     @Body() redeemRequest: RedeemRequestDto,
@@ -50,19 +55,11 @@ export class LoyaltyController {
   }
 
   /**
-   * Extract token from Authorization header
-   */
-  private extractToken(authorization?: string): string | undefined {
-    if (!authorization) return undefined;
-    const parts = authorization.split(" ");
-    return parts.length === 2 && parts[0] === "Bearer" ? parts[1] : undefined;
-  }
-
-  /**
    * GET /loyalty/:userId/redemptions
    * Get redemption history for a user
    */
   @Get(":userId/redemptions")
+  @UseGuards(AuthGuard)
   async getRedemptionHistory(
     @Param("userId") userId: string,
   ): Promise<RedemptionHistoryResponseDto> {
@@ -75,18 +72,26 @@ export class LoyaltyController {
    */
   @Post("/orders")
   @HttpCode(201)
+  @UseGuards(AuthGuard)
   async accrueOrderPoints(
-    @Body()
-    body: {
-      orderId: string;
-      userId: string;
-      totalPrice: number;
-    },
+    @Body() body: AccruePointsRequestDto,
+    @Headers("authorization") authorization?: string,
   ): Promise<{ orderId: string; userId: string; points: number }> {
+    const authToken = this.extractToken(authorization);
     return this.loyaltyService.accruePoints(
       body.orderId,
       body.userId,
       body.totalPrice,
+      authToken,
     );
+  }
+
+  /**
+   * Extract token from Authorization header
+   */
+  private extractToken(authorization?: string): string | undefined {
+    if (!authorization) return undefined;
+    const parts = authorization.split(" ");
+    return parts.length === 2 && parts[0] === "Bearer" ? parts[1] : undefined;
   }
 }
