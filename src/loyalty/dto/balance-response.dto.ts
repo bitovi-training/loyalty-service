@@ -1,4 +1,4 @@
-import { IsString, IsNumber, Min } from 'class-validator';
+import { IsString, IsNumber, Min } from "class-validator";
 
 export class BalanceResponseDto {
   @IsString()

@@ -1,4 +1,4 @@
-export type OrderStatus = 'active' | 'cancelled' | 'refunded';
+export type OrderStatus = "active" | "cancelled" | "refunded";
 
 export interface Order {
   orderId: string; // Unique order identifier

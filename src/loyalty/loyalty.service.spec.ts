@@ -1,15 +1,16 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule } from "@nestjs/testing";
 import {
   NotFoundException,
   ConflictException,
   BadRequestException,
-} from '@nestjs/common';
-import { LoyaltyService } from './loyalty.service';
-import { OrderClient } from '../clients/order-client';
-import { UserClient } from '../clients/user-client';
-import { RedemptionRepository } from './repositories/redemption.repository';
+} from "@nestjs/common";
+import { LoyaltyService } from "./loyalty.service";
+import { OrderClient } from "../clients/order-client";
+import { UserClient } from "../clients/user-client";
+import { RedemptionRepository } from "./repositories/redemption.repository";
+import { OrderRepository } from "./repositories/order.repository";
 
-describe('LoyaltyService - User Story 1: Balance Calculation', () => {
+describe("LoyaltyService - User Story 1: Balance Calculation", () => {
   let service: LoyaltyService;
   let orderClient: jest.Mocked<OrderClient>;
   let userClient: jest.Mocked<UserClient>;
@@ -29,30 +30,68 @@ describe('LoyaltyService - User Story 1: Balance Calculation', () => {
         LoyaltyService,
         { provide: OrderClient, useValue: mockOrderClient },
         { provide: UserClient, useValue: mockUserClient },
+        OrderRepository,
         RedemptionRepository,
       ],
     }).compile();
 
     service = module.get<LoyaltyService>(LoyaltyService);
-    orderClient = module.get(OrderClient) as jest.Mocked<OrderClient>;
-    userClient = module.get(UserClient) as jest.Mocked<UserClient>;
+    orderClient = module.get(OrderClient);
+    userClient = module.get(UserClient);
     redemptionRepository =
       module.get<RedemptionRepository>(RedemptionRepository);
-    
+
     // By default, mock all users as valid
     userClient.validateUser.mockResolvedValue(true);
   });
 
-  describe('calculateBalance', () => {
+  describe("calculateBalance", () => {
     // T021: alice scenario - 300 earned, 100 redeemed = 200 balance
-    it('should calculate correct balance for user with orders and redemptions', async () => {
+    it("should calculate correct balance for user with orders and redemptions", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([
-        { id: 'ord-a1', products: [], totalPrice: 100, orderDate: '2026-01-01', status: 'DELIVERED', accruedLoyaltyPoints: 100 },
-        { id: 'ord-a2', products: [], totalPrice: 150, orderDate: '2026-01-02', status: 'DELIVERED', accruedLoyaltyPoints: 150 },
-        { id: 'ord-a3', products: [], totalPrice: 50, orderDate: '2026-01-03', status: 'SHIPPED', accruedLoyaltyPoints: 50 },
+        {
+          id: "ord-a1",
+          userId: "alice",
+          products: [],
+          totalPrice: 100,
+          orderDate: "2026-01-01",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 100,
+        },
+        {
+          id: "ord-a2",
+          userId: "alice",
+          products: [],
+          totalPrice: 150,
+          orderDate: "2026-01-02",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 150,
+        },
+        {
+          id: "ord-a3",
+          userId: "alice",
+          products: [],
+          totalPrice: 50,
+          orderDate: "2026-01-03",
+          status: "SHIPPED",
+          accruedLoyaltyPoints: 50,
+        },
       ]);
 
-      const result = await service.calculateBalance('alice');
+      redemptionRepository.save({
+        redemptionId: "red-a1",
+        userId: "alice",
+        points: 60,
+        timestamp: new Date("2026-01-05T10:00:00Z"),
+      });
+      redemptionRepository.save({
+        redemptionId: "red-a2",
+        userId: "alice",
+        points: 40,
+        timestamp: new Date("2026-01-06T12:00:00Z"),
+      });
+
+      const result = await service.calculateBalance("alice");
 
       expect(result.earnedPoints).toBe(300); // 100 + 150 + 50
       expect(result.redeemedPoints).toBe(100);
@@ -60,10 +99,10 @@ describe('LoyaltyService - User Story 1: Balance Calculation', () => {
     });
 
     // T022: bob scenario - no orders = 0 balance
-    it('should return zero balance for user with no orders', async () => {
+    it("should return zero balance for user with no orders", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([]);
 
-      const result = await service.calculateBalance('bob');
+      const result = await service.calculateBalance("bob");
 
       expect(result.earnedPoints).toBe(0);
       expect(result.redeemedPoints).toBe(0);
@@ -71,12 +110,33 @@ describe('LoyaltyService - User Story 1: Balance Calculation', () => {
     });
 
     // T023: charlie scenario - 500 earned, 500 redeemed = 0 balance
-    it('should return zero balance for user with fully redeemed points', async () => {
+    it("should return zero balance for user with fully redeemed points", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([
-        { id: 'ord-c1', products: [], totalPrice: 500, orderDate: '2026-01-01', status: 'DELIVERED', accruedLoyaltyPoints: 500 },
+        {
+          id: "ord-c1",
+          userId: "charlie",
+          products: [],
+          totalPrice: 500,
+          orderDate: "2026-01-01",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 500,
+        },
       ]);
 
-      const result = await service.calculateBalance('charlie');
+      redemptionRepository.save({
+        redemptionId: "red-c1",
+        userId: "charlie",
+        points: 250,
+        timestamp: new Date("2026-01-02T10:00:00Z"),
+      });
+      redemptionRepository.save({
+        redemptionId: "red-c2",
+        userId: "charlie",
+        points: 250,
+        timestamp: new Date("2026-01-03T10:00:00Z"),
+      });
+
+      const result = await service.calculateBalance("charlie");
 
       expect(result.earnedPoints).toBe(500);
       expect(result.redeemedPoints).toBe(500); // 250 + 250
@@ -84,13 +144,29 @@ describe('LoyaltyService - User Story 1: Balance Calculation', () => {
     });
 
     // T024: dave scenario - only delivered/shipped orders count (pending/cancelled excluded)
-    it('should exclude pending and cancelled orders from balance calculation', async () => {
+    it("should exclude pending and cancelled orders from balance calculation", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([
-        { id: 'ord-d1', products: [], totalPrice: 200, orderDate: '2026-01-01', status: 'DELIVERED', accruedLoyaltyPoints: 200 },
-        { id: 'ord-d2', products: [], totalPrice: 100, orderDate: '2026-01-02', status: 'CANCELED', accruedLoyaltyPoints: 100 },
+        {
+          id: "ord-d1",
+          userId: "dave",
+          products: [],
+          totalPrice: 200,
+          orderDate: "2026-01-01",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 200,
+        },
+        {
+          id: "ord-d2",
+          userId: "dave",
+          products: [],
+          totalPrice: 100,
+          orderDate: "2026-01-02",
+          status: "CANCELED",
+          accruedLoyaltyPoints: 100,
+        },
       ]);
 
-      const result = await service.calculateBalance('dave');
+      const result = await service.calculateBalance("dave");
 
       // Dave has 1 delivered order (200 pts) and 1 cancelled (100 pts)
       // Only delivered should count
@@ -100,42 +176,72 @@ describe('LoyaltyService - User Story 1: Balance Calculation', () => {
     });
   });
 
-  describe('getBalance', () => {
-    it('should return balance response DTO for valid user', async () => {
+  describe("getBalance", () => {
+    it("should return balance response DTO for valid user", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([
-        { id: 'ord-a1', products: [], totalPrice: 100, orderDate: '2026-01-01', status: 'DELIVERED', accruedLoyaltyPoints: 100 },
-        { id: 'ord-a2', products: [], totalPrice: 150, orderDate: '2026-01-02', status: 'DELIVERED', accruedLoyaltyPoints: 150 },
-        { id: 'ord-a3', products: [], totalPrice: 50, orderDate: '2026-01-03', status: 'SHIPPED', accruedLoyaltyPoints: 50 },
+        {
+          id: "ord-a1",
+          userId: "alice",
+          products: [],
+          totalPrice: 100,
+          orderDate: "2026-01-01",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 100,
+        },
+        {
+          id: "ord-a2",
+          userId: "alice",
+          products: [],
+          totalPrice: 150,
+          orderDate: "2026-01-02",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 150,
+        },
+        {
+          id: "ord-a3",
+          userId: "alice",
+          products: [],
+          totalPrice: 50,
+          orderDate: "2026-01-03",
+          status: "SHIPPED",
+          accruedLoyaltyPoints: 50,
+        },
       ]);
 
-      const result = await service.getBalance('alice');
+      redemptionRepository.save({
+        redemptionId: "red-a1",
+        userId: "alice",
+        points: 100,
+        timestamp: new Date("2026-01-05T10:00:00Z"),
+      });
+
+      const result = await service.getBalance("alice");
 
       expect(result).toEqual({
-        userId: 'alice',
+        userId: "alice",
         balance: 200,
         earnedPoints: 300,
         redeemedPoints: 100,
       });
     });
 
-    it('should throw NotFoundException for non-existent user', async () => {
+    it("should throw NotFoundException for non-existent user", async () => {
       userClient.validateUser.mockResolvedValue(false);
-      
-      await expect(service.getBalance('nonexistent')).rejects.toThrow(
+
+      await expect(service.getBalance("nonexistent")).rejects.toThrow(
         NotFoundException,
       );
-      await expect(service.getBalance('nonexistent')).rejects.toThrow(
-        'User nonexistent not found',
+      await expect(service.getBalance("nonexistent")).rejects.toThrow(
+        "User nonexistent not found",
       );
     });
   });
 });
 
-describe('LoyaltyService - User Story 2: Redemption', () => {
+describe("LoyaltyService - User Story 2: Redemption", () => {
   let service: LoyaltyService;
   let orderClient: jest.Mocked<OrderClient>;
   let userClient: jest.Mocked<UserClient>;
-  let redemptionRepository: RedemptionRepository;
 
   beforeEach(async () => {
     const mockOrderClient = {
@@ -152,36 +258,58 @@ describe('LoyaltyService - User Story 2: Redemption', () => {
         LoyaltyService,
         { provide: OrderClient, useValue: mockOrderClient },
         { provide: UserClient, useValue: mockUserClient },
+        OrderRepository,
         RedemptionRepository,
       ],
     }).compile();
 
     service = module.get<LoyaltyService>(LoyaltyService);
-    orderClient = module.get(OrderClient) as jest.Mocked<OrderClient>;
-    userClient = module.get(UserClient) as jest.Mocked<UserClient>;
-    redemptionRepository =
-      module.get<RedemptionRepository>(RedemptionRepository);
-    
+    orderClient = module.get(OrderClient);
+    userClient = module.get(UserClient);
     // By default, mock all users as valid
     userClient.validateUser.mockResolvedValue(true);
   });
 
-  describe('redeemPoints', () => {
+  describe("redeemPoints", () => {
     // T038: Valid redemption - alice has 200 available initially
-    it('should successfully redeem points when sufficient balance exists', async () => {
+    it("should successfully redeem points when sufficient balance exists", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([
-        { id: 'ord-a1', products: [], totalPrice: 100, orderDate: '2026-01-01', status: 'DELIVERED', accruedLoyaltyPoints: 100 },
-        { id: 'ord-a2', products: [], totalPrice: 150, orderDate: '2026-01-02', status: 'DELIVERED', accruedLoyaltyPoints: 150 },
-        { id: 'ord-a3', products: [], totalPrice: 50, orderDate: '2026-01-03', status: 'SHIPPED', accruedLoyaltyPoints: 50 },
+        {
+          id: "ord-a1",
+          userId: "alice",
+          products: [],
+          totalPrice: 100,
+          orderDate: "2026-01-01",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 100,
+        },
+        {
+          id: "ord-a2",
+          userId: "alice",
+          products: [],
+          totalPrice: 150,
+          orderDate: "2026-01-02",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 150,
+        },
+        {
+          id: "ord-a3",
+          userId: "alice",
+          products: [],
+          totalPrice: 50,
+          orderDate: "2026-01-03",
+          status: "SHIPPED",
+          accruedLoyaltyPoints: 50,
+        },
       ]);
 
       // Get current balance first
-      const initialBalance = await service.calculateBalance('alice');
+      const initialBalance = await service.calculateBalance("alice");
       const redeemAmount = 50; // Redeem a smaller amount
 
-      const result = await service.redeemPoints('alice', redeemAmount);
+      const result = await service.redeemPoints("alice", redeemAmount);
 
-      expect(result.userId).toBe('alice');
+      expect(result.userId).toBe("alice");
       expect(result.points).toBe(redeemAmount);
       expect(result.newBalance).toBe(initialBalance.balance - redeemAmount);
       expect(result.redemptionId).toBeDefined();
@@ -189,56 +317,80 @@ describe('LoyaltyService - User Story 2: Redemption', () => {
     });
 
     // T039: Insufficient points - bob has 0, try to redeem 100
-    it('should throw ConflictException when insufficient points', async () => {
+    it("should throw ConflictException when insufficient points", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([]);
 
-      await expect(service.redeemPoints('bob', 100)).rejects.toThrow(
+      await expect(service.redeemPoints("bob", 100)).rejects.toThrow(
         ConflictException,
       );
     });
 
     // T040: Exact balance redemption - use dave (200 available, no prior redemptions)
-    it('should allow redemption of exact available balance', async () => {
+    it("should allow redemption of exact available balance", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([
-        { id: 'ord-d1', products: [], totalPrice: 200, orderDate: '2026-01-01', status: 'DELIVERED', accruedLoyaltyPoints: 200 },
+        {
+          id: "ord-d1",
+          userId: "dave",
+          products: [],
+          totalPrice: 200,
+          orderDate: "2026-01-01",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 200,
+        },
       ]);
 
-      const currentBalance = await service.calculateBalance('dave');
-      const result = await service.redeemPoints('dave', currentBalance.balance);
+      const currentBalance = await service.calculateBalance("dave");
+      const result = await service.redeemPoints("dave", currentBalance.balance);
 
-      expect(result.userId).toBe('dave');
+      expect(result.userId).toBe("dave");
       expect(result.points).toBe(currentBalance.balance);
       expect(result.newBalance).toBe(0);
     });
 
     // T041: Negative/zero points validation
-    it('should throw BadRequestException for zero points', async () => {
-      await expect(service.redeemPoints('alice', 0)).rejects.toThrow(
+    it("should throw BadRequestException for zero points", async () => {
+      await expect(service.redeemPoints("alice", 0)).rejects.toThrow(
         BadRequestException,
       );
     });
 
-    it('should throw BadRequestException for negative points', async () => {
-      await expect(service.redeemPoints('alice', -50)).rejects.toThrow(
+    it("should throw BadRequestException for negative points", async () => {
+      await expect(service.redeemPoints("alice", -50)).rejects.toThrow(
         BadRequestException,
       );
     });
 
     // T042: Concurrency safety - two redemptions serialized
     // Use dave who has no prior redemptions
-    it('should handle concurrent redemptions for same user safely', async () => {
+    it("should handle concurrent redemptions for same user safely", async () => {
       orderClient.getOrdersByUserId.mockResolvedValue([
-        { id: 'ord-d1', products: [], totalPrice: 100, orderDate: '2026-01-01', status: 'DELIVERED', accruedLoyaltyPoints: 100 },
-        { id: 'ord-d2', products: [], totalPrice: 100, orderDate: '2026-01-02', status: 'DELIVERED', accruedLoyaltyPoints: 100 },
+        {
+          id: "ord-d1",
+          userId: "dave",
+          products: [],
+          totalPrice: 100,
+          orderDate: "2026-01-01",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 100,
+        },
+        {
+          id: "ord-d2",
+          userId: "dave",
+          products: [],
+          totalPrice: 100,
+          orderDate: "2026-01-02",
+          status: "DELIVERED",
+          accruedLoyaltyPoints: 100,
+        },
       ]);
 
       // Check dave's balance (200 available, no prior redemptions)
-      const initialBalance = await service.calculateBalance('dave');
+      const initialBalance = await service.calculateBalance("dave");
       expect(initialBalance.balance).toBe(200);
 
       // Dave has 200 available, redeem 50 twice concurrently
-      const redemption1Promise = service.redeemPoints('dave', 50);
-      const redemption2Promise = service.redeemPoints('dave', 50);
+      const redemption1Promise = service.redeemPoints("dave", 50);
+      const redemption2Promise = service.redeemPoints("dave", 50);
 
       // Both should complete without error (mutex ensures serialization)
       const results = await Promise.all([
@@ -251,23 +403,22 @@ describe('LoyaltyService - User Story 2: Redemption', () => {
       expect(results[1].points).toBe(50);
 
       // Final balance should be 100 (200 - 50 - 50)
-      const finalBalance = await service.calculateBalance('dave');
+      const finalBalance = await service.calculateBalance("dave");
       expect(finalBalance.balance).toBe(100);
     });
 
-    it('should throw NotFoundException for non-existent user', async () => {
+    it("should throw NotFoundException for non-existent user", async () => {
       userClient.validateUser.mockResolvedValue(false);
-      
-      await expect(service.redeemPoints('nonexistent', 50)).rejects.toThrow(
+
+      await expect(service.redeemPoints("nonexistent", 50)).rejects.toThrow(
         NotFoundException,
       );
     });
   });
 });
 
-describe('LoyaltyService - User Story 3: Redemption History', () => {
+describe("LoyaltyService - User Story 3: Redemption History", () => {
   let service: LoyaltyService;
-  let orderClient: jest.Mocked<OrderClient>;
   let userClient: jest.Mocked<UserClient>;
   let redemptionRepository: RedemptionRepository;
 
@@ -285,26 +436,39 @@ describe('LoyaltyService - User Story 3: Redemption History', () => {
         LoyaltyService,
         { provide: OrderClient, useValue: mockOrderClient },
         { provide: UserClient, useValue: mockUserClient },
+        OrderRepository,
         RedemptionRepository,
       ],
     }).compile();
 
     service = module.get<LoyaltyService>(LoyaltyService);
-    orderClient = module.get(OrderClient) as jest.Mocked<OrderClient>;
-    userClient = module.get(UserClient) as jest.Mocked<UserClient>;
+    userClient = module.get(UserClient);
     redemptionRepository =
       module.get<RedemptionRepository>(RedemptionRepository);
-    
+
     // By default, mock all users as valid
     userClient.validateUser.mockResolvedValue(true);
   });
 
-  describe('getRedemptionHistory', () => {
+  describe("getRedemptionHistory", () => {
     // T061: user with multiple redemptions (eve has 2)
-    it('should return redemptions in reverse chronological order (newest first)', async () => {
-      const result = await service.getRedemptionHistory('eve');
+    it("should return redemptions in reverse chronological order (newest first)", async () => {
+      redemptionRepository.save({
+        redemptionId: "red-e1",
+        userId: "eve",
+        points: 25,
+        timestamp: new Date("2026-01-18T12:00:00Z"),
+      });
+      redemptionRepository.save({
+        redemptionId: "red-e2",
+        userId: "eve",
+        points: 75,
+        timestamp: new Date("2026-01-19T16:45:00Z"),
+      });
 
-      expect(result.userId).toBe('eve');
+      const result = await service.getRedemptionHistory("eve");
+
+      expect(result.userId).toBe("eve");
       expect(result.redemptions).toHaveLength(2);
 
       // Verify newest first
@@ -318,17 +482,29 @@ describe('LoyaltyService - User Story 3: Redemption History', () => {
     });
 
     // T062: user with no redemptions (bob)
-    it('should return empty array for user with no redemptions', async () => {
-      const result = await service.getRedemptionHistory('bob');
+    it("should return empty array for user with no redemptions", async () => {
+      const result = await service.getRedemptionHistory("bob");
 
-      expect(result.userId).toBe('bob');
+      expect(result.userId).toBe("bob");
       expect(result.redemptions).toEqual([]);
     });
 
     // T063: verify sorting
-    it('should sort redemptions by timestamp descending', async () => {
-      // Charlie has 2 redemptions per stub data
-      const result = await service.getRedemptionHistory('charlie');
+    it("should sort redemptions by timestamp descending", async () => {
+      redemptionRepository.save({
+        redemptionId: "red-c1",
+        userId: "charlie",
+        points: 250,
+        timestamp: new Date("2026-01-19T14:30:00Z"),
+      });
+      redemptionRepository.save({
+        redemptionId: "red-c2",
+        userId: "charlie",
+        points: 250,
+        timestamp: new Date("2026-01-20T09:15:00Z"),
+      });
+
+      const result = await service.getRedemptionHistory("charlie");
 
       expect(result.redemptions).toHaveLength(2);
 
@@ -339,10 +515,10 @@ describe('LoyaltyService - User Story 3: Redemption History', () => {
       }
     });
 
-    it('should throw NotFoundException for non-existent user', async () => {
+    it("should throw NotFoundException for non-existent user", async () => {
       userClient.validateUser.mockResolvedValue(false);
-      
-      await expect(service.getRedemptionHistory('nonexistent')).rejects.toThrow(
+
+      await expect(service.getRedemptionHistory("nonexistent")).rejects.toThrow(
         NotFoundException,
       );
     });

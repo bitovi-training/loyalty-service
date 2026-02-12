@@ -1,15 +1,18 @@
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
-  ConflictException,
-  BadRequestException,
-} from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
-import { OrderClient } from '../clients/order-client';
-import { UserClient } from '../clients/user-client';
-import { RedemptionRepository } from './repositories/redemption.repository';
-import { BalanceResponseDto } from './dto/balance-response.dto';
-import { RedemptionResponseDto } from './dto/redemption-response.dto';
+  UnauthorizedException,
+  ForbiddenException,
+} from "@nestjs/common";
+import { v4 as uuidv4 } from "uuid";
+import { OrderClient } from "../clients/order-client";
+import { UserClient } from "../clients/user-client";
+import { BalanceResponseDto } from "./dto/balance-response.dto";
+import { RedemptionResponseDto } from "./dto/redemption-response.dto";
+import { OrderRepository } from "./repositories/order.repository";
+import { RedemptionRepository } from "./repositories/redemption.repository";
 
 @Injectable()
 export class LoyaltyService {
@@ -19,6 +22,7 @@ export class LoyaltyService {
   constructor(
     private readonly orderClient: OrderClient,
     private readonly userClient: UserClient,
+    private readonly orderRepository: OrderRepository,
     private readonly redemptionRepository: RedemptionRepository,
   ) {}
 
@@ -26,18 +30,25 @@ export class LoyaltyService {
    * Calculate available balance for a user
    * Balance = SUM(active orders.points) - SUM(redemptions.points)
    */
-  async calculateBalance(userId: string, authToken?: string): Promise<{
+  async calculateBalance(
+    userId: string,
+    authToken?: string,
+  ): Promise<{
     earnedPoints: number;
     redeemedPoints: number;
     balance: number;
   }> {
-    // Fetch orders from Order Service
-    const ordersResponse = await this.orderClient.getOrdersByUserId(userId, authToken);
+    const ordersResponse = await this.orderClient.getOrdersByUserId(
+      userId,
+      authToken,
+    );
     const redemptions = this.redemptionRepository.findByUserId(userId);
 
     // Calculate earned points from completed/delivered orders
     const earnedPoints = ordersResponse
-      .filter((order) => order.status === 'DELIVERED' || order.status === 'SHIPPED')
+      .filter(
+        (order) => order.status === "DELIVERED" || order.status === "SHIPPED",
+      )
       .reduce((sum, order) => sum + (order.accruedLoyaltyPoints || 0), 0);
 
     const redeemedPoints = redemptions.reduce(
@@ -53,7 +64,10 @@ export class LoyaltyService {
   /**
    * Get loyalty balance for a user
    */
-  async getBalance(userId: string, authToken?: string): Promise<BalanceResponseDto> {
+  async getBalance(
+    userId: string,
+    authToken?: string,
+  ): Promise<BalanceResponseDto> {
     // Validate user exists per research.md Decision 7
     const userExists = await this.userClient.validateUser(userId);
     if (!userExists) {
@@ -112,7 +126,7 @@ export class LoyaltyService {
   ): Promise<RedemptionResponseDto> {
     // Validate positive points per research.md Decision 7
     if (points <= 0) {
-      throw new BadRequestException('Redemption amount must be positive');
+      throw new BadRequestException("Redemption amount must be positive");
     }
 
     // Validate user exists
@@ -183,5 +197,65 @@ export class LoyaltyService {
       userId,
       redemptions: sortedRedemptions,
     };
+  }
+
+  /**
+   * Record loyalty points earned for an order
+   */
+  async accruePoints(
+    orderId: string,
+    userId: string,
+    totalPrice: number,
+    authToken?: string,
+  ): Promise<{ orderId: string; userId: string; points: number }> {
+    if (!orderId) {
+      throw new BadRequestException("Order ID is required");
+    }
+
+    if (!userId) {
+      throw new BadRequestException("User ID is required");
+    }
+
+    const userExists = await this.userClient.validateUser(userId);
+    if (!userExists) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    try {
+      await this.orderClient.getOrderById(orderId, authToken);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      if (error instanceof NotFoundException) {
+        throw new NotFoundException(`Order ${orderId} not found`);
+      }
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException("Invalid order ID");
+    }
+
+    if (totalPrice < 0) {
+      throw new BadRequestException("Total price must be non-negative");
+    }
+
+    const points = Math.floor(totalPrice / 10);
+
+    this.orderRepository.save({
+      orderId,
+      userId,
+      points,
+      status: "active",
+    });
+
+    return { orderId, userId, points };
   }
 }
