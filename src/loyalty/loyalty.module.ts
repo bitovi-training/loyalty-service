@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { AuthModule } from "@bitovi-corp/auth-middleware";
+import { AuthModule } from "@bitovi-training/auth-middleware";
 import { RedemptionRepository } from "./repositories/redemption.repository";
 import { OrderRepository } from "./repositories/order.repository";
 import { LoyaltyService } from "./loyalty.service";

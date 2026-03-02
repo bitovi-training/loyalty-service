@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
-import { AuthGuard } from "@bitovi-corp/auth-middleware";
+import { AuthGuard } from "@bitovi-training/auth-middleware";
 import { LoyaltyService } from "./loyalty.service";
 import { BalanceResponseDto } from "./dto/balance-response.dto";
 import { RedeemRequestDto } from "./dto/redeem-request.dto";
